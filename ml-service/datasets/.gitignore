@@ -1,6 +1,6 @@
 datasets/
 *.csv
-datasets/openphish.txt
+data/openphish.txt
 __pycache__/
 *.pyc
 .env
