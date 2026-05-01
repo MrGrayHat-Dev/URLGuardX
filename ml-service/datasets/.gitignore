@@ -1,4 +1,4 @@
-datasets/
+data/
 *.csv
 data/openphish.txt
 __pycache__/
