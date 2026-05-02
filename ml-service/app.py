@@ -18,3 +18,6 @@ def predict(data: dict):
         "prediction": int(pred),
         "confidence": float(prob)
     }
+    @app.get("/health")
+def health():
+    return {"status": "UP"}
