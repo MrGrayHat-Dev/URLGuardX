@@ -1,39 +1,31 @@
-# ============================================================
-#  URLGuardX — Multi-stage Dockerfile
-#  Stage 1: Build with Maven
-#  Stage 2: Run with slim JRE
-# ============================================================
-
-# ---------- BUILD STAGE ----------
-FROM maven:3.9.6-eclipse-temurin-21 AS builder
+# ---------- STAGE 1: Build ----------
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
 WORKDIR /app
-
-# Copy pom first for layer caching — dependencies won't re-download on code-only changes
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN mvn dependency:go-offline
 
-# Copy source and build
 COPY src ./src
-RUN mvn clean package -DskipTests -B
+RUN mvn clean package -DskipTests
 
-# ---------- RUN STAGE ----------
-FROM eclipse-temurin:21-jre-alpine
+
+# ---------- STAGE 2: Runtime ----------
+FROM eclipse-temurin:17-jdk-jammy
 
 WORKDIR /app
 
-# Non-root user for security
-RUN addgroup -S urlguardx && adduser -S urlguardx -G urlguardx
-USER urlguardx
+# Optional but useful for debugging DB/network
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the built JAR from builder stage
+# Copy built jar
 COPY --from=builder /app/target/*.jar app.jar
 
-# Expose the port (matches server.port in application.properties)
+# Expose port (Render uses $PORT)
 EXPOSE 10000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:10000/actuator/health || exit 1
-
+# Run app
 ENTRYPOINT ["java", "-jar", "app.jar"]
