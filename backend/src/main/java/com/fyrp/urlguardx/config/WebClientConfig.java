@@ -1,4 +1,5 @@
-package com.fyrp.urlguardx.service;
+package com.fyrp.urlguardx.config;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
