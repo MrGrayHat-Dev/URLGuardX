@@ -15,9 +15,10 @@ public class LexicalAnalysisService {
     private static final Logger log = LoggerFactory.getLogger(LexicalAnalysisService.class);
 
     private final WebClient webClient;
-
+    @org.springframework.beans.factory.annotation.Value("${ML_SERVICE_URL}")
+    private String mlServiceUrl;
     public LexicalAnalysisService(WebClient.Builder builder) {
-        this.webClient = builder.baseUrl("http://localhost:8000").build();
+        this.webClient = builder.build(); // remove baseUrl here
     }
     @org.springframework.cache.annotation.Cacheable(
             value = "mlCache",
@@ -29,7 +30,7 @@ public class LexicalAnalysisService {
             log.info("[LEXICAL-ML] Sending URL to ML service: {}", url);
 
             Map response = webClient.post()
-                    .uri("/predict")
+                    .uri(mlServiceUrl)
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Map.of("url", url))
                     .retrieve()

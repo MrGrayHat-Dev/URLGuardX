@@ -5,17 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="636714ce-8fae-4486-85da-db4fd9068c15" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/target/classes/application.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/controller/GlobalExceptionHandler.class" beforeDir="false" afterPath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/controller/GlobalExceptionHandler.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/controller/ScanController.class" beforeDir="false" afterPath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/controller/ScanController.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/service/BlacklistCheckerService$UrlHausResult.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/service/BlacklistCheckerService.class" beforeDir="false" afterPath="$PROJECT_DIR$/target/classes/com/fyrp/urlguardx/service/BlacklistCheckerService.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/urlguardx-0.0.1-SNAPSHOT.jar" beforeDir="false" afterPath="$PROJECT_DIR$/target/urlguardx-0.0.1-SNAPSHOT.jar" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/target/urlguardx-0.0.1-SNAPSHOT.jar.original" beforeDir="false" afterPath="$PROJECT_DIR$/target/urlguardx-0.0.1-SNAPSHOT.jar.original" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/fyrp/urlguardx/service/LexicalAnalysisService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/fyrp/urlguardx/service/LexicalAnalysisService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/application.properties" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -27,11 +20,12 @@
       <list>
         <option value="Python Script" />
         <option value="Class" />
+        <option value="Dockerfile" />
       </list>
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
   <component name="MavenRunner">
     <option name="delegateBuildToMaven" value="true" />
@@ -41,18 +35,23 @@
   &quot;associatedIndex&quot;: 3
 }</component>
   <component name="ProjectId" id="3Br2bewIhpSlT4etQ5D5mbpaK4R" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
     "Application.UrlguardxApplication.executor": "Debug",
     "Maven.UrlguardxApplication.executor": "Run",
     "Maven.urlguardx [install,--non-recursive].executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "git-widget-placeholder": "main",
     "junie.onboarding.icon.badge.shown": "true",
@@ -61,7 +60,7 @@
     "project.structure.last.edited": "Libraries",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "reference.settings.project.maven.runner",
+    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings",
     "to.speed.mode.migration.done": "true"
   }
 }]]></component>
