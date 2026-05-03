@@ -44,59 +44,87 @@ public class AgenticControllerService {
 
         log.info("[AGENT] Starting scan for {}", url);
 
-        ModuleResult lexical;
-        ModuleResult blacklist;
-        ModuleResult domain = ModuleResult.skipped("Not executed");
-        ModuleResult ssl = ModuleResult.skipped("Not executed");
+        /*
+         STEP 1 — LEXICAL ALWAYS RUNS
+         */
+        ModuleResult lexical = lexicalService.analyze(url);
 
-        // ✅ LEXICAL (safe)
-        try {
-            lexical = lexicalService.analyze(url);
-        } catch (Exception e) {
-            log.error("Lexical failed", e);
-            lexical = ModuleResult.warning("Lexical failed", 10.0);
-        }
+        /*
+         STEP 2 — BLACKLIST ALWAYS RUNS
+         (even if ML says danger)
+         */
+        ModuleResult blacklist = blacklistService.check(url);
 
-        // ✅ BLACKLIST (safe)
-        try {
-            blacklist = blacklistService.check(url);
-        } catch (Exception e) {
-            log.error("Blacklist failed", e);
-            blacklist = ModuleResult.warning("Blacklist unavailable", 20.0);
-        }
-
-        // ✅ FAIL FAST
+        /*
+         FAIL FAST ONLY FOR REAL BLACKLIST HIT
+         */
         if ("Danger".equalsIgnoreCase(blacklist.getStatus())) {
-            return buildResponse(url, lexical, domain, ssl, blacklist);
+
+            ModuleResult ssl = ModuleResult.skipped(
+                    "Skipped after confirmed blacklist hit");
+
+            ModuleResult domain = ModuleResult.skipped(
+                    "Skipped after confirmed blacklist hit");
+
+            return buildResponse(
+                    url,
+                    lexical,
+                    domain,
+                    ssl,
+                    blacklist
+            );
         }
 
-        boolean goldenDomain = false;
+        /*
+         STEP 3 — TRUSTED DOMAIN CHECK
+         */
+        boolean goldenDomain = domainService.isGoldenDomain(url);
 
-        try {
-            goldenDomain = domainService.isGoldenDomain(url);
-        } catch (Exception e) {
-            log.error("Golden domain check failed", e);
+        ModuleResult domain;
+        ModuleResult ssl;
+
+        /*
+         Golden domain:
+         Skip WHOIS only
+         Still run SSL
+         */
+        if (goldenDomain) {
+            domain = ModuleResult.clean(
+                    "Golden domain detected — WHOIS skipped",
+                    2.0
+            );
+
+            ssl = sslService.validate(url);
+        }
+        /*
+         HTTP URL:
+         skip SSL validation because no certificate exists
+         */
+        else if (url.startsWith("http://")) {
+
+            ssl = ModuleResult.danger(
+                    "Plain HTTP detected — no TLS protection",
+                    70.0
+            );
+
+            domain = domainService.analyze(url);
         }
 
-        // ✅ DOMAIN + SSL SAFE BLOCK
-        try {
-            if (goldenDomain) {
-                domain = ModuleResult.clean("Golden domain detected", 2.0);
-                ssl = sslService.validate(url);
-            } else if (url.startsWith("http://")) {
-                ssl = ModuleResult.danger("No HTTPS", 70.0);
-                domain = domainService.analyze(url);
-            } else {
-                domain = domainService.analyze(url);
-                ssl = sslService.validate(url);
-            }
-        } catch (Exception e) {
-            log.error("Domain/SSL failed", e);
-            domain = ModuleResult.warning("Domain check failed", 25.0);
-            ssl = ModuleResult.warning("SSL check failed", 25.0);
+        /*
+         Standard Full Scan
+         */
+        else {
+            domain = domainService.analyze(url);
+            ssl = sslService.validate(url);
         }
 
-        return buildResponse(url, lexical, domain, ssl, blacklist);
+        return buildResponse(
+                url,
+                lexical,
+                domain,
+                ssl,
+                blacklist
+        );
     }
 
     private ScanResponse buildResponse(
@@ -116,16 +144,17 @@ public class AgenticControllerService {
 
         String status = riskEngine.getFinalStatus(score);
 
-        String explanation;
+        String explanation =
+                geminiService.generateExplanation(
+                        url,
+                        score,
+                        status,
+                        lexical,
+                        domain,
+                        ssl,
+                        blacklist
+                );
 
-        try {
-            explanation = geminiService.generateExplanation(
-                    url, score, status, lexical, domain, ssl, blacklist
-            );
-        } catch (Exception e) {
-            log.error("Gemini failed", e);
-            explanation = "AI explanation unavailable (fallback)";
-        }
         ScanResponse response = new ScanResponse();
         response.setRiskScore(score);
         response.setStatus(status);
