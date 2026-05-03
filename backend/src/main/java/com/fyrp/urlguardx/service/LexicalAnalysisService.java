@@ -29,8 +29,8 @@ public class LexicalAnalysisService {
         try {
             log.info("[LEXICAL-ML] Sending URL to ML service: {}", url);
 
-            Map response = webClient.post()
-                    .uri(mlServiceUrl)
+            Map<String, Object> response = webClient.post()
+                    .uri(mlServiceUrl + "/predict")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Map.of("url", url))
                     .retrieve()
