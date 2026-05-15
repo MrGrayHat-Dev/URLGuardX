@@ -10,9 +10,9 @@ evaluate_pipeline.py
 evaluate_urlguardx.py
 evaluate_uci.py
 uci.phishing.csv
-features.py
+feature_schema.pkl
 phishing_url_dataset_unique.csv
-confusion_matrix.py
+confusion_matrix.png
 benchmark_features.py
 benchmark_features.csv
 model.pkl
