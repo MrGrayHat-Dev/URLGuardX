@@ -26,6 +26,12 @@ public class ScanResponse {
 
     public ScanResponse() {}
 
+    public void setCanonicalUrl(String url) {
+    }
+
+    public void setResolvedUrl(String finalUrl) {
+    }
+
     // ---- Inner wrapper so JSON key is "modules" ----
     public static class ModulesWrapper {
         private ModuleResult lexical;

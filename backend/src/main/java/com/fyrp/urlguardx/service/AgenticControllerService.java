@@ -43,13 +43,16 @@ public class AgenticControllerService {
 
         /*
          STEP 1 — LEXICAL ALWAYS RUNS
-         */
-        ModuleResult lexical = lexicalService.analyze(url);
+         Normalize scheme to http:// before ML analysis so https://neverssl.com
+         and http://neverssl.com produce identical model inputs and cache keys.
+        */
+        String lexicalUrl = url.replaceFirst("^https://", "http://");
+        ModuleResult lexical = lexicalService.analyze(lexicalUrl);
 
         /*
          STEP 2 — BLACKLIST ALWAYS RUNS
          (even if ML says danger)
-         */
+        */
         ModuleResult blacklist = blacklistService.check(url);
 
         /*
@@ -141,6 +144,12 @@ public class AgenticControllerService {
                 );
 
         ScanResponse response = new ScanResponse();
+        // resolvedUrl = the true final URL (after HTTPS upgrade, cross-domain redirect,
+        // or HTTP downgrade detection). This is what the Analyzed Vector should display.
+        String resolvedUrl = ssl.getResolvedUrl();
+        String finalUrl    = resolvedUrl != null ? normalizeUrl(resolvedUrl) : url;
+        response.setCanonicalUrl(url);     // original input (for reference)
+        response.setResolvedUrl(finalUrl); // final effective URL shown in UI
         response.setRiskScore(score);
         response.setStatus(status);
         response.setExplanation(explanation);
@@ -156,14 +165,58 @@ public class AgenticControllerService {
         return response;
     }
 
-    private String normalizeUrl(String url) {
-        url = url.trim();
-
-        if (!url.startsWith("http://")
-                && !url.startsWith("https://")) {
-            return "https://" + url;
+    /**
+     * Canonicalize the URL before it reaches any service or cache:
+     *  - Prepend https:// if no scheme is present
+     *  - Lowercase the host
+     *  - Strip trailing slash from the path (so /neverssl.com == /neverssl.com/)
+     *  - Remove default ports (80 for http, 443 for https)
+     *
+     * This means http://neverssl.com and http://neverssl.com/ are treated
+     * as the same URL throughout the entire analysis pipeline.
+     */
+    private String normalizeUrl(String raw) {
+        raw = raw.trim();
+        if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
+            // Bare IPs default to http:// so the SSL module follows the redirect chain.
+            // Bare domains default to https://.
+            String hostPart = raw.split("/")[0].split(":")[0];
+            boolean isBareIp = hostPart.matches("(\\d{1,3}\\.){3}\\d{1,3}");
+            raw = (isBareIp ? "http://" : "https://") + raw;
         }
+        try {
+            java.net.URL parsed = new java.net.URL(raw);
+            String scheme   = parsed.getProtocol().toLowerCase();
+            String host     = parsed.getHost().toLowerCase();
+            int    port     = parsed.getPort();
+            String path     = parsed.getPath();
+            String query    = parsed.getQuery();
+            String fragment = parsed.getRef();
 
-        return url;
+            // Strip default ports
+            if ((scheme.equals("http")  && port == 80)  ||
+                    (scheme.equals("https") && port == 443)) {
+                port = -1;
+            }
+
+            // Strip ALL trailing slashes from the path
+            // e.g. http://neverssl.com/  → path="/"  → becomes ""
+            //      http://example.com/a/ → path="/a/" → becomes "/a"
+            while (path.endsWith("/")) {
+                path = path.substring(0, path.length() - 1);
+            }
+
+            StringBuilder sb = new StringBuilder(scheme).append("://").append(host);
+            if (port != -1) sb.append(":").append(port);
+            sb.append(path);
+            // Drop query string and fragment — they are not part of the canonical security identity
+            // e.g. https://www.google.com/?gws_rd=ssl → https://www.google.com
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("[AGENT] URL normalization failed for '{}': {}", raw, e.getMessage());
+            return raw;
+        }
     }
+
 }

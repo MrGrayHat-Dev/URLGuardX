@@ -17,3 +17,7 @@ benchmark_features.py
 benchmark_features.csv
 model.pkl
 *.pkl
+results_summary.txt
+roc_curve.png
+backend_results.txt
+benchmark_results.txt

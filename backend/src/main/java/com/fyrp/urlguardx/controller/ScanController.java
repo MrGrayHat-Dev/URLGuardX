@@ -46,13 +46,43 @@ public class ScanController {
         log.info("[CONTROLLER] Scan request received for: {}", url);
 
         // ✅ STEP 1 — Normalize URL
+        // Bare IPs default to http:// (browser behavior) so the SSL module can follow
+        // redirect chains (e.g. 8.8.8.8 → https://dns.google/).
+        // Bare domains default to https://.
         if (!url.startsWith("http")) {
-            url = "https://" + url;
+            boolean isBareIp = url.split("/")[0].split(":")[0].matches("(\\d{1,3}\\.){3}\\d{1,3}");
+            url = (isBareIp ? "http://" : "https://") + url;
         }
 
-        // ✅ STEP 2 — Validate URL format
+        // ✅ STEP 2 — Validate URL format: accept proper domains (with letter TLD) OR IPv4 addresses
         try {
-            new java.net.URL(url);
+            java.net.URL parsed = new java.net.URL(url);
+            String host = parsed.getHost();
+
+            if (host == null || host.isEmpty()) {
+                throw new IllegalArgumentException("URL must contain a valid host");
+            }
+
+            // Check if it's a valid IPv4 address (e.g. 8.8.8.8, 192.168.1.1)
+            boolean isIPv4 = host.matches("(\\d{1,3}\\.){3}\\d{1,3}");
+
+            if (!isIPv4) {
+                // Domain name — must have a dot and a non-numeric TLD
+                if (!host.contains(".")) {
+                    log.warn("[CONTROLLER] Bare hostname with no dot: {}", url);
+                    throw new IllegalArgumentException("URL must contain a valid domain name with a TLD or an IP address");
+                }
+                String[] parts = host.split("\\.");
+                String tld = parts[parts.length - 1];
+                if (tld.matches("\\d+")) {
+                    log.warn("[CONTROLLER] Numeric TLD on non-IP host — malformed: {}", url);
+                    throw new IllegalArgumentException("URL must contain a valid domain name with a TLD or an IP address");
+                }
+            } else {
+                log.info("[CONTROLLER] IPv4 address accepted: {}", host);
+            }
+        } catch (IllegalArgumentException iae) {
+            throw iae;
         } catch (Exception e) {
             log.warn("[CONTROLLER] Invalid URL received: {}", url);
             throw new IllegalArgumentException("Invalid URL format");
