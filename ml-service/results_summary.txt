@@ -1,0 +1,29 @@
+URLGuardX Paper Results
+============================================================
+
+=== TABLE II: URLGuardX UCI Results ===
+Accuracy  : 69.47%
+Precision : 64.84%
+Recall    : 67.82%
+F1-Score  : 66.30%
+AUC-ROC   : 0.72
+
+=== TABLE IV: Baseline Comparisons (UCI) ===
+Logistic Regression: Acc=92.63% Pre=93.13% Rec=89.99% F1=91.53% AUC=0.98
+Random Forest (standalone): Acc=97.33% Pre=98.12% Rec=95.81% F1=96.95% AUC=1.00
+Gradient Boosting (XGBoost-like): Acc=95.12% Pre=95.32% Rec=93.56% F1=94.43% AUC=0.99
+
+=== TABLE III: Ablation Study ===
+Signal Combination                    Accuracy         F1
+------------------------------------------------------------
+Lexical only                             55.72%       0.00%
++ Domain / WHOIS                         52.69%      16.32%
++ SSL Validation                         72.55%      67.31%
++ Blacklist (full pipeline)              69.47%      66.30%
+
+=== TABLE II: URLGuardX Kaggle Results ===
+Accuracy  : 28.47%
+Precision : 28.47%
+Recall    : 100.00%
+F1-Score  : 44.33%
+AUC-ROC   : 0.50
