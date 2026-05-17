@@ -17,7 +17,7 @@ public class CacheConfig {
 
         manager.setCaffeine(
                 Caffeine.newBuilder()
-                        .expireAfterWrite(10, TimeUnit.MINUTES)  // 🔥 TTL
+                        .expireAfterWrite(15, TimeUnit.SECONDS)  // 🔥 TTL reduced to 15 seconds for testing
                         .maximumSize(1000)
         );
 
