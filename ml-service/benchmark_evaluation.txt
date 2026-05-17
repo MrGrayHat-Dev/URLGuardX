@@ -1,0 +1,25 @@
+====================================
+URLGuardX Benchmark Evaluation
+====================================
+Dataset Size: 35750 URLs (Balanced 50/50)
+------------------------------------
+Accuracy  : 91.9692%
+Precision : 87.6947%
+Recall    : 97.6392%
+F1-Score  : 92.4001%
+AUC-ROC   : 0.9783
+
+=== Classification Report ===
+              precision    recall  f1-score   support
+
+  Legitimate       0.97      0.86      0.91     17875
+    Phishing       0.88      0.98      0.92     17875
+
+    accuracy                           0.92     35750
+   macro avg       0.93      0.92      0.92     35750
+weighted avg       0.93      0.92      0.92     35750
+
+
+=== Confusion Matrix ===
+[[15426  2449]
+ [  422 17453]]
