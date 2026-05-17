@@ -19,7 +19,7 @@ from sklearn.metrics import (
 
 API_URL = "https://urlguardx-backend.onrender.com/api/v1/scan"
 
-DATASET_PATH = "phishing_url_dataset_unique.csv"
+DATASET_PATH = "data/benchmark_urls.csv"
 
 TIMEOUT = 60
 RETRIES = 3
