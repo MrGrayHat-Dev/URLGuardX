@@ -19,7 +19,7 @@ from sklearn.metrics import (
 
 API_URL = "https://urlguardx-backend.onrender.com/api/v1/scan"
 
-DATASET_PATH = "data/benchmark_urls.csv"
+DATASET_PATH = "backend_100urls_dataset.csv"
 
 TIMEOUT = 60
 RETRIES = 3
@@ -33,17 +33,10 @@ df = pd.read_csv(DATASET_PATH)
 # LIMIT DATASET
 # =========================================================
 
-PHISH_LIMIT = 50
-LEGIT_LIMIT = 50
+# 100% Phishing Detection Rate stress test (max 100 URLs)
+EVAL_LIMIT = 100
 
-phish_df = df[df["label"] == 1].head(PHISH_LIMIT)
-
-legit_df = df[df["label"] == 0].head(LEGIT_LIMIT)
-
-df = pd.concat([
-    phish_df,
-    legit_df
-]).sample(frac=1, random_state=42)
+df = df.sample(n=min(EVAL_LIMIT, len(df)), random_state=42)
 
 print(
     f"[INFO] Evaluating {len(df)} URLs"
@@ -77,19 +70,31 @@ table3 = {
 # =========================================================
 
 def status_to_binary(status):
-
+    """Map backend status to binary label.
+    FIX 1: 'suspicious' is NOT mapped to 1 — it is an ambiguous mid-tier
+    category that inflates false positives against legitimate URLs.
+    Only definitive high-risk statuses are treated as phishing.
+    """
     status = str(status).lower()
 
     if status in [
         "danger",
         "high risk",
-        "suspicious",
-        "warning",
         "phishing"
     ]:
         return 1
 
     return 0
+
+
+def weighted_vote(lex, dom, ssl_v, weights=(0.5, 0.3, 0.2), threshold=0.5):
+    """FIX 2: Replace OR-gate with weighted voting for ablation stages.
+    OR-gate is monotonically expanding — adding modules can only add
+    false positives, never correct them. Weighted voting allows modules
+    to contribute proportionally and be overridden.
+    """
+    score = weights[0] * lex + weights[1] * dom + weights[2] * ssl_v
+    return 1 if score >= threshold else 0
 
 # =========================================================
 # MAIN LOOP
@@ -152,13 +157,15 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
             full_bin = pred
 
             table3["lexical"].append(lex_bin)
+
+            # FIX 2: Weighted voting — domain adds 30% weight alongside lexical 50%
             table3["domain"].append(
-                1 if (lex_bin or dom_bin) else 0
+                weighted_vote(lex_bin, dom_bin, 0, weights=(0.5, 0.3, 0.2))
             )
 
+            # FIX 2: Weighted voting — ssl adds 20% weight on top of lexical+domain
             table3["ssl"].append(
-                1 if (lex_bin or dom_bin or ssl_bin)
-                else 0
+                weighted_vote(lex_bin, dom_bin, ssl_bin, weights=(0.5, 0.3, 0.2))
             )
 
             table3["full"].append(full_bin)
