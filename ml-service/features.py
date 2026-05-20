@@ -48,7 +48,7 @@ def extract_features(url):
 
     url_len = len(url)
 
-    dom_len = len(domain)
+    dom_len = len(host)
 
     tld_len = len(suffix)
 
@@ -137,10 +137,8 @@ def extract_features(url):
     return [
 
         url_len,
-        len(domain),
         dom_len,
         is_ip,
-        len(suffix),
         tld_len,
         subdom_cnt,
         letter_cnt,
