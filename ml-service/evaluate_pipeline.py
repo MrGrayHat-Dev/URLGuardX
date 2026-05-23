@@ -93,14 +93,14 @@ def module_to_binary(status: str) -> int:
 
 
 def weighted_vote(lex: int, dom: int, ssl_v: int, bl: int = 0,
-                  weights=(0.15, 0.25, 0.20, 0.40), threshold=0.5) -> int:
+                  weights=(0.45, 0.20, 0.10, 0.25), threshold=0.5) -> int:
     """Weighted-vote fusion for the cumulative ablation stages.
 
     Weights mirror RiskScoringEngine.java exactly:
-      blacklist=0.40, domain=0.25, ssl=0.20, lexical=0.15
+      lexical=0.45, blacklist=0.25, domain=0.20, ssl=0.10
 
-    For partial stages (before blacklist is introduced), active-module
-    weights are re-normalised so they still sum to 1.0.
+    For partial stages (before all modules are introduced), OR-gate is
+    used instead of weighted vote to avoid zero-contribution dominance.
     """
     score = weights[0] * lex + weights[1] * dom + weights[2] * ssl_v + weights[3] * bl
     return 1 if score >= threshold else 0
@@ -151,27 +151,25 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
             # Stage 1: Lexical (ML) only
             table3["lexical"].append(lex_bin)
 
-            # Stage 2: Lexical + Blacklist
-            # Active weights: lex=0.15, bl=0.40  → re-normalised to (0.2727, 0.7273)
-            table3["blacklist"].append(
-                weighted_vote(lex_bin, 0, 0, bl_bin,
-                              weights=(0.2727, 0.0, 0.0, 0.7273))
-            )
+            # Stage 2: Lexical + Blacklist  (OR-gate)
+            # OR-gate: phishing if EITHER module flags.
+            # Weighted vote is unusable here because blacklist (weight=0.73)
+            # returns Clean on novel/unlisted URLs, making lex alone (0.27)
+            # unable to cross any threshold → predicts all-0.
+            table3["blacklist"].append(1 if (lex_bin or bl_bin) else 0)
 
-            # Stage 3: Lexical + Blacklist + SSL
-            # Active weights: lex=0.15, bl=0.40, ssl=0.20  → re-normalised to (0.20, 0.5333, 0.2667)
-            table3["ssl"].append(
-                weighted_vote(lex_bin, 0, ssl_bin, bl_bin,
-                              weights=(0.20, 0.0, 0.2667, 0.5333))
-            )
+            # Stage 3: Lexical + Blacklist + SSL  (OR-gate)
+            # Same reasoning — ssl and blacklist rarely fire together,
+            # so OR-gate correctly shows the additive detection coverage.
+            table3["ssl"].append(1 if (lex_bin or bl_bin or ssl_bin) else 0)
 
             # Stage 4: All modules — exact RiskScoringEngine weights
-            # lex=0.15, bl=0.40, ssl=0.20, dom=0.25  (sums to 1.0)
-            # threshold=0.46 mirrors the engine's new High Risk boundary of 70/100
-            # (previously 75/100 → 0.50; now 70/100 → 0.46)
+            # lex=0.45, bl=0.25, dom=0.20, ssl=0.10  (sums to 1.0)
+            # threshold=0.46: lex alone scores 0.45 < 0.46 (Suspicious, per Rule 3)
+            #                  lex + any other module crosses 0.46 (High Risk)
             table3["domain"].append(
                 weighted_vote(lex_bin, dom_bin, ssl_bin, bl_bin,
-                              weights=(0.15, 0.25, 0.20, 0.40), threshold=0.46)
+                              weights=(0.45, 0.20, 0.10, 0.25), threshold=0.46)
             )
 
             # Stage 5: Full pipeline (final backend decision)
