@@ -33,41 +33,68 @@ public class RiskScoringEngine {
         if ("Warning".equalsIgnoreCase(domain.getStatus())) warningCount++;
         if ("Warning".equalsIgnoreCase(ssl.getStatus())) warningCount++;
 
-
+        /*
+         RULE 2:
+         2+ Danger signals from any module = high risk
+         */
         if (dangerCount >= 2) {
             return 85;
         }
 
-
+        /*
+         RULE 3:
+         Lexical Danger + no blacklist hit + no domain flag.
+         Raised from 35 → 65 so novel phishing is Suspicious (not Safe).
+         Only suppress if domain is explicitly Clean AND ssl is also Clean
+         (both corroborating evidence of legitimacy).
+         */
         if (
                 "Danger".equalsIgnoreCase(lexical.getStatus())
                         && "Clean".equalsIgnoreCase(blacklist.getStatus())
                         && "Clean".equalsIgnoreCase(domain.getStatus())
+                        && "Clean".equalsIgnoreCase(ssl.getStatus())
         ) {
-            // ML-only danger should not dominate
-            return 35;
+            return 65;
         }
 
-        if (dangerCount == 1 && warningCount >= 1) {
-            return 60;
+        /*
+         RULE 3b:
+         Lexical Danger + SSL warning/danger + no blacklist = strong corroboration.
+         Novel phishing with bad cert evidence should score High Risk.
+         */
+        if (
+                "Danger".equalsIgnoreCase(lexical.getStatus())
+                        && "Clean".equalsIgnoreCase(blacklist.getStatus())
+                        && !"Clean".equalsIgnoreCase(ssl.getStatus())
+        ) {
+            return 78;
         }
 
         /*
          RULE 4:
-         Reduce ML false positives
+         1 Danger + 1+ Warning from remaining modules = elevated risk
+         */
+        if (dangerCount == 1 && warningCount >= 1) {
+            return 72;
+        }
+
+        /*
+         RULE 5:
+         Reduce ML false positives — only penalise very high lexical scores
+         when both blacklist AND domain AND ssl are all Clean.
          */
         double lexicalScore = lexical.getScore();
 
-        if (lexicalScore > 85
+        if (lexicalScore > 90
                 && "Clean".equalsIgnoreCase(blacklist.getStatus())
-                && "Clean".equalsIgnoreCase(domain.getStatus())) {
-            lexicalScore *= 0.35;
+                && "Clean".equalsIgnoreCase(domain.getStatus())
+                && "Clean".equalsIgnoreCase(ssl.getStatus())) {
+            lexicalScore *= 0.50;
         }
 
         /*
          Final weighted score
          */
-
         double finalScore =
                 (blacklist.getScore() * 0.40) +
                         (domain.getScore() * 0.25) +
@@ -75,14 +102,14 @@ public class RiskScoringEngine {
                         (lexicalScore * 0.15);
 
         return Math.min(
-                (int)Math.round(finalScore),
+                (int) Math.round(finalScore),
                 100
         );
     }
 
     public String getFinalStatus(int score) {
 
-        if (score >= 75) {
+        if (score >= 70) {
             return "High Risk";
         }
 

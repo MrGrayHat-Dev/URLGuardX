@@ -1,7 +1,8 @@
 import time
+
+import numpy as np
 import requests
 import pandas as pd
-import numpy as np
 
 from sklearn.metrics import (
     accuracy_score,
@@ -10,7 +11,7 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
     classification_report,
-    confusion_matrix
+    confusion_matrix,
 )
 
 # =========================================================
@@ -19,7 +20,9 @@ from sklearn.metrics import (
 
 API_URL = "https://urlguardx-backend.onrender.com/api/v1/scan"
 
-DATASET_PATH = "backend_100urls_dataset.csv"
+# Pre-built balanced benchmark: 50 phishing (label=1) + 50 benign (label=0)
+# Sourced from phishing_url_dataset_unique.csv — fixed seed for reproducibility
+DATASET_PATH = "data/backend_benchmark_100.csv"
 
 TIMEOUT = 60
 RETRIES = 3
@@ -29,75 +32,82 @@ RETRIES = 3
 # =========================================================
 
 df = pd.read_csv(DATASET_PATH)
-# =========================================================
-# LIMIT DATASET
-# =========================================================
-
-# 100% Phishing Detection Rate stress test (max 100 URLs)
-EVAL_LIMIT = 100
-
-df = df.sample(n=min(EVAL_LIMIT, len(df)), random_state=42)
 
 print(
-    f"[INFO] Evaluating {len(df)} URLs"
+    f"[INFO] Evaluating {len(df)} URLs "
+    f"(phishing={int((df['label']==1).sum())}, "
+    f"benign={int((df['label']==0).sum())})"
 )
 
-url_col = "url"
+url_col   = "url"
 label_col = "label"
 
-urls = df[url_col].astype(str).values
+urls   = df[url_col].astype(str).values
 labels = df[label_col].astype(int).values
 
 # =========================================================
 # STORAGE
 # =========================================================
 
-truth = []
-preds = []
-scores = []
-
+truth     = []
+preds     = []
+scores    = []
 latencies = []
 
+# Ablation columns — one prediction list per stage
 table3 = {
-    "lexical": [],
-    "domain": [],
-    "ssl": [],
-    "full": []
+    "lexical"  : [],   # Stage 1 : ML lexical alone
+    "blacklist": [],   # Stage 2 : + Blacklist         (cumulative weighted vote)
+    "ssl"      : [],   # Stage 3 : + SSL Validation   (cumulative weighted vote)
+    "domain"   : [],   # Stage 4 : + Domain / WHOIS   (cumulative weighted vote)
+    "full"     : [],   # Stage 5 : Full pipeline decision
 }
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def status_to_binary(status):
-    """Map backend status to binary label.
-    FIX 1: 'suspicious' is NOT mapped to 1 — it is an ambiguous mid-tier
-    category that inflates false positives against legitimate URLs.
-    Only definitive high-risk statuses are treated as phishing.
+def overall_to_binary(status: str) -> int:
+    """Map the *top-level* backend status to binary.
+
+    RiskScoringEngine.getFinalStatus() emits exactly:
+      'High Risk'  (score >= 70) → phishing   → 1
+      'Suspicious' (score >= 40) → ambiguous  → 0
+      'Safe'       (score <  40) → benign     → 0
+
+    Only 'High Risk' is treated as a definitive positive.
+    Threshold lowered from 75 → 70 to improve recall on novel phishing.
     """
-    status = str(status).lower()
-
-    if status in [
-        "danger",
-        "high risk",
-        "phishing"
-    ]:
-        return 1
-
-    return 0
+    return 1 if str(status).strip().lower() == "high risk" else 0
 
 
-def weighted_vote(lex, dom, ssl_v, weights=(0.5, 0.3, 0.2), threshold=0.5):
-    """FIX 2: Replace OR-gate with weighted voting for ablation stages.
-    OR-gate is monotonically expanding — adding modules can only add
-    false positives, never correct them. Weighted voting allows modules
-    to contribute proportionally and be overridden.
+def module_to_binary(status: str) -> int:
+    """Map a *module-level* ModuleResult status to binary.
+
+    ModuleResult emits exactly: 'Clean' | 'Warning' | 'Danger' | 'Skipped'
+
+    Both 'Danger' and 'Warning' mean the module raised a flag → 1.
+    'Clean' and 'Skipped' mean no signal                      → 0.
     """
-    score = weights[0] * lex + weights[1] * dom + weights[2] * ssl_v
+    return 1 if str(status).strip().lower() in ("danger", "warning") else 0
+
+
+def weighted_vote(lex: int, dom: int, ssl_v: int, bl: int = 0,
+                  weights=(0.15, 0.25, 0.20, 0.40), threshold=0.5) -> int:
+    """Weighted-vote fusion for the cumulative ablation stages.
+
+    Weights mirror RiskScoringEngine.java exactly:
+      blacklist=0.40, domain=0.25, ssl=0.20, lexical=0.15
+
+    For partial stages (before blacklist is introduced), active-module
+    weights are re-normalised so they still sum to 1.0.
+    """
+    score = weights[0] * lex + weights[1] * dom + weights[2] * ssl_v + weights[3] * bl
     return 1 if score >= threshold else 0
 
+
 # =========================================================
-# MAIN LOOP
+# MAIN EVALUATION LOOP
 # =========================================================
 
 for idx, (url, label) in enumerate(zip(urls, labels), start=1):
@@ -105,172 +115,221 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
     success = False
 
     for retry in range(RETRIES):
-
         try:
-
-            start = time.time()
-
+            t0 = time.time()
             response = requests.post(
                 API_URL,
                 json={"url": url},
-                timeout=TIMEOUT
+                timeout=TIMEOUT,
             )
-
-            latency = time.time() - start
+            latency = time.time() - t0
 
             if response.status_code != 200:
+                print(f"[{idx:>3}] HTTP {response.status_code} — retry {retry+1}")
                 continue
 
             data = response.json()
 
-            risk_score = float(
-                data.get("riskScore", 0)
-            )
+            # ── Top-level fields ──────────────────────────────────────────
+            risk_score = float(data.get("riskScore", 0))
+            status     = data.get("status", "Safe")
+            pred       = overall_to_binary(status)
 
-            status = data.get("status", "Safe")
-
-            pred = status_to_binary(status)
-
-            # ============================================
-            # MODULES
-            # ============================================
-
-            modules = data.get("modules", {})
-
-            lexical = modules.get("lexical", {})
-            domain = modules.get("domain", {})
-            ssl = modules.get("ssl", {})
+            # ── Module results ────────────────────────────────────────────
+            modules   = data.get("modules", {})
+            lexical   = modules.get("lexical",   {})
+            domain    = modules.get("domain",    {})
+            ssl       = modules.get("ssl",       {})
             blacklist = modules.get("blacklist", {})
 
-            lex_bin = status_to_binary(
-                lexical.get("status", "Clean")
-            )
+            lex_bin = module_to_binary(lexical.get("status",   "Clean"))
+            dom_bin = module_to_binary(domain.get("status",    "Clean"))
+            ssl_bin = module_to_binary(ssl.get("status",       "Clean"))
+            bl_bin  = module_to_binary(blacklist.get("status", "Clean"))
 
-            dom_bin = status_to_binary(
-                domain.get("status", "Clean")
-            )
-
-            ssl_bin = status_to_binary(
-                ssl.get("status", "Clean")
-            )
-
-            full_bin = pred
-
+            # ── Ablation stages ───────────────────────────────────────────
+            # Stage 1: Lexical (ML) only
             table3["lexical"].append(lex_bin)
 
-            # FIX 2: Weighted voting — domain adds 30% weight alongside lexical 50%
-            table3["domain"].append(
-                weighted_vote(lex_bin, dom_bin, 0, weights=(0.5, 0.3, 0.2))
+            # Stage 2: Lexical + Blacklist
+            # Active weights: lex=0.15, bl=0.40  → re-normalised to (0.2727, 0.7273)
+            table3["blacklist"].append(
+                weighted_vote(lex_bin, 0, 0, bl_bin,
+                              weights=(0.2727, 0.0, 0.0, 0.7273))
             )
 
-            # FIX 2: Weighted voting — ssl adds 20% weight on top of lexical+domain
+            # Stage 3: Lexical + Blacklist + SSL
+            # Active weights: lex=0.15, bl=0.40, ssl=0.20  → re-normalised to (0.20, 0.5333, 0.2667)
             table3["ssl"].append(
-                weighted_vote(lex_bin, dom_bin, ssl_bin, weights=(0.5, 0.3, 0.2))
+                weighted_vote(lex_bin, 0, ssl_bin, bl_bin,
+                              weights=(0.20, 0.0, 0.2667, 0.5333))
             )
 
-            table3["full"].append(full_bin)
+            # Stage 4: All modules — exact RiskScoringEngine weights
+            # lex=0.15, bl=0.40, ssl=0.20, dom=0.25  (sums to 1.0)
+            # threshold=0.46 mirrors the engine's new High Risk boundary of 70/100
+            # (previously 75/100 → 0.50; now 70/100 → 0.46)
+            table3["domain"].append(
+                weighted_vote(lex_bin, dom_bin, ssl_bin, bl_bin,
+                              weights=(0.15, 0.25, 0.20, 0.40), threshold=0.46)
+            )
+
+            # Stage 5: Full pipeline (final backend decision)
+            table3["full"].append(pred)
 
             truth.append(label)
             preds.append(pred)
             scores.append(risk_score / 100.0)
-
             latencies.append(latency)
 
             print(
-                f"[{idx}] "
-                f"STATUS={status} "
-                f"RISK={risk_score}"
+                f"[{idx:>3}] label={label} pred={pred} "
+                f"status={status!r:12s} risk={risk_score:5.1f} "
+                f"latency={latency:.2f}s"
             )
 
             success = True
             break
 
-        except Exception as e:
-
-            print(f"[{idx}] ERROR -> {e}")
+        except Exception as exc:
+            print(f"[{idx:>3}] ERROR (retry {retry+1}/{RETRIES}) → {exc}")
 
     if not success:
-        print(f"[{idx}] FAILED")
+        print(f"[{idx:>3}] FAILED after {RETRIES} retries — URL skipped")
 
 # =========================================================
-# FINAL METRICS
+# GUARD
+# =========================================================
+
+if len(truth) == 0:
+    print("[ERROR] No successful responses — cannot compute metrics.")
+    exit(1)
+
+# =========================================================
+# LATENCY STATS
+# =========================================================
+
+lat = np.array(latencies)
+lat_avg = lat.mean()
+lat_p95 = np.percentile(lat, 95)
+lat_min = lat.min()
+lat_max = lat.max()
+
+# =========================================================
+# OVERALL METRICS
 # =========================================================
 
 acc = accuracy_score(truth, preds)
-pre = precision_score(truth, preds)
-rec = recall_score(truth, preds)
-f1 = f1_score(truth, preds)
+pre = precision_score(truth, preds, zero_division=0)
+rec = recall_score(truth, preds, zero_division=0)
+f1v = f1_score(truth, preds, zero_division=0)
 auc = roc_auc_score(truth, scores)
 
 print("\n===================================")
 print("URLGuardX Backend Evaluation")
 print("===================================")
-
-print(f"Accuracy  : {acc*100:.2f}%")
-print(f"Precision : {pre*100:.2f}%")
-print(f"Recall    : {rec*100:.2f}%")
-print(f"F1-Score  : {f1*100:.2f}%")
-print(f"AUC-ROC   : {auc:.4f}")
+print(f"URLs evaluated  : {len(truth)} / {len(urls)}")
+print(f"Accuracy        : {acc*100:.2f}%")
+print(f"Precision       : {pre*100:.2f}%")
+print(f"Recall          : {rec*100:.2f}%")
+print(f"F1-Score        : {f1v*100:.2f}%")
+print(f"AUC-ROC         : {auc:.4f}")
+print(f"\nLatency avg     : {lat_avg:.2f}s")
+print(f"Latency p95     : {lat_p95:.2f}s")
+print(f"Latency min     : {lat_min:.2f}s")
+print(f"Latency max     : {lat_max:.2f}s")
 
 # =========================================================
-# TABLE III
+# TABLE III — ABLATION
 # =========================================================
+
+ABLATION_ROWS = [
+    ("lexical",   "Lexical (ML only)    "),
+    ("blacklist", "+ Blacklist          "),
+    ("ssl",       "+ SSL Validation     "),
+    ("domain",    "+ Domain / WHOIS     "),
+    ("full",      "Full Pipeline        "),
+]
 
 print("\n===================================")
 print("TABLE III — ABLATION")
 print("===================================")
+print(f"{'Stage':<26}  {'ACC':>7}  {'P':>7}  {'R':>7}  {'F1':>7}")
+print("-" * 62)
 
-for key, name in [
-    ("lexical", "Lexical URL only"),
-    ("domain", "+ Domain/WHOIS"),
-    ("ssl", "+ SSL Validation"),
-    ("full", "+ URLHaus Blacklist")
-]:
-
-    p = table3[key]
-
-    a = accuracy_score(truth, p)
-    f = f1_score(truth, p)
-
+for key, name in ABLATION_ROWS:
+    p   = table3[key]
+    a   = accuracy_score(truth, p)
+    pr  = precision_score(truth, p, zero_division=0)
+    re  = recall_score(truth, p, zero_division=0)
+    fk  = f1_score(truth, p, zero_division=0)
     print(
-        f"{name:30s} "
-        f"ACC={a*100:.2f}% "
-        f"F1={f*100:.2f}%"
+        f"{name:<26}  "
+        f"{a*100:6.2f}%  "
+        f"{pr*100:6.2f}%  "
+        f"{re*100:6.2f}%  "
+        f"{fk*100:6.2f}%"
     )
+
+# =========================================================
+# CLASSIFICATION REPORT & CONFUSION MATRIX
+# =========================================================
+
+print("\n===================================")
+print("CLASSIFICATION REPORT")
+print("===================================")
+print(classification_report(truth, preds, target_names=["Benign", "Phishing"]))
+
+cm = confusion_matrix(truth, preds)
+tn, fp, fn, tp = cm.ravel()
+print("Confusion Matrix:")
+print(f"  TN={tn}  FP={fp}")
+print(f"  FN={fn}  TP={tp}")
 
 # =========================================================
 # SAVE REPORT
 # =========================================================
 
-with open("backend_results.txt", "w") as f:
+with open("backend_results.txt", "w") as out:
 
-    f.write("URLGuardX Backend Evaluation\n")
-    f.write("="*50 + "\n\n")
+    out.write("URLGuardX Backend Evaluation\n")
+    out.write("=" * 50 + "\n\n")
 
-    f.write(f"Accuracy  : {acc*100:.2f}%\n")
-    f.write(f"Precision : {pre*100:.2f}%\n")
-    f.write(f"Recall    : {rec*100:.2f}%\n")
-    f.write(f"F1-Score  : {f1*100:.2f}%\n")
-    f.write(f"AUC-ROC   : {auc:.4f}\n\n")
+    out.write(f"URLs evaluated  : {len(truth)} / {len(urls)}\n")
+    out.write(f"Accuracy        : {acc*100:.2f}%\n")
+    out.write(f"Precision       : {pre*100:.2f}%\n")
+    out.write(f"Recall          : {rec*100:.2f}%\n")
+    out.write(f"F1-Score        : {f1v*100:.2f}%\n")
+    out.write(f"AUC-ROC         : {auc:.4f}\n\n")
 
-    f.write("TABLE III\n")
+    out.write(f"Latency avg     : {lat_avg:.2f}s\n")
+    out.write(f"Latency p95     : {lat_p95:.2f}s\n")
+    out.write(f"Latency min     : {lat_min:.2f}s\n")
+    out.write(f"Latency max     : {lat_max:.2f}s\n\n")
 
-    for key, name in [
-        ("lexical", "Lexical URL only"),
-        ("domain", "+ Domain/WHOIS"),
-        ("ssl", "+ SSL Validation"),
-        ("full", "+ URLHaus Blacklist")
-    ]:
+    out.write("TABLE III — Ablation\n")
+    out.write(f"{'Stage':<26}  {'ACC':>7}  {'P':>7}  {'R':>7}  {'F1':>7}\n")
+    out.write("-" * 62 + "\n")
 
-        p = table3[key]
-
-        a = accuracy_score(truth, p)
-        f1v = f1_score(truth, p)
-
-        f.write(
-            f"{name}: "
-            f"ACC={a*100:.2f}% "
-            f"F1={f1v*100:.2f}%\n"
+    for key, name in ABLATION_ROWS:
+        p   = table3[key]
+        a   = accuracy_score(truth, p)
+        pr  = precision_score(truth, p, zero_division=0)
+        re  = recall_score(truth, p, zero_division=0)
+        fk  = f1_score(truth, p, zero_division=0)
+        out.write(
+            f"{name:<26}  "
+            f"{a*100:6.2f}%  "
+            f"{pr*100:6.2f}%  "
+            f"{re*100:6.2f}%  "
+            f"{fk*100:6.2f}%\n"
         )
+
+    out.write("\nClassification Report\n")
+    out.write(classification_report(truth, preds, target_names=["Benign", "Phishing"]))
+
+    out.write("\nConfusion Matrix:\n")
+    out.write(f"  TN={tn}  FP={fp}\n")
+    out.write(f"  FN={fn}  TP={tp}\n")
 
 print("\n[INFO] Results saved -> backend_results.txt")
