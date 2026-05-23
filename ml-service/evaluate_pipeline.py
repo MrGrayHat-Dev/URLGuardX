@@ -92,18 +92,24 @@ def module_to_binary(status: str) -> int:
     return 1 if str(status).strip().lower() in ("danger", "warning") else 0
 
 
-def weighted_vote(lex: int, dom: int, ssl_v: int, bl: int = 0,
-                  weights=(0.25, 0.20, 0.15, 0.40), threshold=0.5) -> int:
-    """Weighted-vote fusion for the cumulative ablation stages.
+def mock_engine_decision(lex: int, dom: int, ssl_v: int, bl: int = 0) -> int:
+    """Mimics the RiskScoringEngine's hard rules for the cumulative ablation stages.
 
-    Weights mirror RiskScoringEngine.java exactly:
-      blacklist=0.40, lexical=0.25, domain=0.20, ssl=0.15
-
-    For partial stages (before all modules are introduced), OR-gate is
-    used instead of weighted vote to avoid zero-contribution dominance.
+    Since the engine now uses normalized weightage (Rule 2/3b) and boundary
+    overrides (Rule 4), a simple linear sum is no longer accurate.
+    
+    Approximation logic:
+      - Rule 1: Blacklist Danger → always High Risk (1)
+      - Rule 2/3b: Any 2+ active modules → normalized score ~100 → High Risk (1)
+      - Rule 3/Formula: Any 1 module (except Blacklist) → < 70 → Safe/Suspicious (0)
     """
-    score = weights[0] * lex + weights[1] * dom + weights[2] * ssl_v + weights[3] * bl
-    return 1 if score >= threshold else 0
+    if bl == 1:
+        return 1
+    
+    if (lex + dom + ssl_v) >= 2:
+        return 1
+        
+    return 0
 
 
 # =========================================================
@@ -163,13 +169,11 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
             # so OR-gate correctly shows the additive detection coverage.
             table3["ssl"].append(1 if (lex_bin or bl_bin or ssl_bin) else 0)
 
-            # Stage 4: All modules — exact RiskScoringEngine weights
-            # bl=0.40, lex=0.25, dom=0.20, ssl=0.15  (sums to 1.0)
-            # threshold=0.46: lex alone (0.25) < 0.46 → Suspicious (per Rule 3)
-            #                  lex + dom (0.45) < 0.46 → borderline; lex + bl (0.65) → High Risk
+            # Stage 4: All modules — Simulated RiskScoringEngine logic
+            # Replaces the linear weighted formula to properly account for the 
+            # engine's new normalized scoring rules (Rule 2, 3b, 4).
             table3["domain"].append(
-                weighted_vote(lex_bin, dom_bin, ssl_bin, bl_bin,
-                              weights=(0.25, 0.20, 0.15, 0.40), threshold=0.46)
+                mock_engine_decision(lex_bin, dom_bin, ssl_bin, bl_bin)
             )
 
             # Stage 5: Full pipeline (final backend decision)
