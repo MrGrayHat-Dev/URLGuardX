@@ -93,11 +93,11 @@ def module_to_binary(status: str) -> int:
 
 
 def weighted_vote(lex: int, dom: int, ssl_v: int, bl: int = 0,
-                  weights=(0.45, 0.20, 0.10, 0.25), threshold=0.5) -> int:
+                  weights=(0.25, 0.20, 0.15, 0.40), threshold=0.5) -> int:
     """Weighted-vote fusion for the cumulative ablation stages.
 
     Weights mirror RiskScoringEngine.java exactly:
-      lexical=0.45, blacklist=0.25, domain=0.20, ssl=0.10
+      blacklist=0.40, lexical=0.25, domain=0.20, ssl=0.15
 
     For partial stages (before all modules are introduced), OR-gate is
     used instead of weighted vote to avoid zero-contribution dominance.
@@ -164,12 +164,12 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
             table3["ssl"].append(1 if (lex_bin or bl_bin or ssl_bin) else 0)
 
             # Stage 4: All modules — exact RiskScoringEngine weights
-            # lex=0.45, bl=0.25, dom=0.20, ssl=0.10  (sums to 1.0)
-            # threshold=0.46: lex alone scores 0.45 < 0.46 (Suspicious, per Rule 3)
-            #                  lex + any other module crosses 0.46 (High Risk)
+            # bl=0.40, lex=0.25, dom=0.20, ssl=0.15  (sums to 1.0)
+            # threshold=0.46: lex alone (0.25) < 0.46 → Suspicious (per Rule 3)
+            #                  lex + dom (0.45) < 0.46 → borderline; lex + bl (0.65) → High Risk
             table3["domain"].append(
                 weighted_vote(lex_bin, dom_bin, ssl_bin, bl_bin,
-                              weights=(0.45, 0.20, 0.10, 0.25), threshold=0.46)
+                              weights=(0.25, 0.20, 0.15, 0.40), threshold=0.46)
             )
 
             # Stage 5: Full pipeline (final backend decision)
