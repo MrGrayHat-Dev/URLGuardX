@@ -36,8 +36,34 @@ public class RiskScoringEngine {
         /*
          RULE 2:
          2+ Danger signals from any module.
-         Removed hardcoded 85. Now falls through to weightage calculation below.
+         Score is calculated based on the signals and weightage of the flagged modules,
+         normalized so that clean modules don't drag the score down to Safe.
          */
+        if (dangerCount >= 2) {
+            double flaggedScore = 0.0;
+            double flaggedWeight = 0.0;
+
+            if (!"Clean".equalsIgnoreCase(lexical.getStatus())) {
+                flaggedScore += lexical.getScore() * 0.25;
+                flaggedWeight += 0.25;
+            }
+            if (!"Clean".equalsIgnoreCase(blacklist.getStatus())) {
+                flaggedScore += blacklist.getScore() * 0.40;
+                flaggedWeight += 0.40;
+            }
+            if (!"Clean".equalsIgnoreCase(domain.getStatus())) {
+                flaggedScore += domain.getScore() * 0.20;
+                flaggedWeight += 0.20;
+            }
+            if (!"Clean".equalsIgnoreCase(ssl.getStatus())) {
+                flaggedScore += ssl.getScore() * 0.15;
+                flaggedWeight += 0.15;
+            }
+
+            if (flaggedWeight > 0) {
+                return (int) Math.round(flaggedScore / flaggedWeight);
+            }
+        }
 
         /*
          RULE 3:
@@ -56,8 +82,18 @@ public class RiskScoringEngine {
         /*
          RULE 3b:
          Lexical Danger + SSL warning/danger.
-         Removed hardcoded 78. Now falls through to weightage calculation below.
+         Score is calculated based on their specific signals and weightage.
          */
+        if (
+                "Danger".equalsIgnoreCase(lexical.getStatus())
+                        && "Clean".equalsIgnoreCase(blacklist.getStatus())
+                        && !"Clean".equalsIgnoreCase(ssl.getStatus())
+        ) {
+            double lexW = 0.25;
+            double sslW = 0.15;
+            double combinedScore = (lexical.getScore() * lexW + ssl.getScore() * sslW) / (lexW + sslW);
+            return (int) Math.round(combinedScore);
+        }
 
         /*
          RULE 4:
