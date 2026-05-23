@@ -97,10 +97,15 @@ public class RiskScoringEngine {
 
         /*
          RULE 4:
-         1 Danger (not blacklist) + 3 Warnings = score > 70
+         1 Danger (not blacklist) + 3 Warnings = High Risk (75)
+         1 Danger (not blacklist) + 1-2 Warnings = Suspicious (55)
          */
-        if (dangerCount == 1 && warningCount >= 3) {
-            return 75;
+        if (dangerCount == 1) {
+            if (warningCount >= 3) {
+                return 75;
+            } else if (warningCount >= 1) {
+                return 55;
+            }
         }
 
         /*
