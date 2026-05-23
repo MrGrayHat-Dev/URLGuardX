@@ -35,18 +35,14 @@ public class RiskScoringEngine {
 
         /*
          RULE 2:
-         2+ Danger signals from any module = high risk
+         2+ Danger signals from any module.
+         Removed hardcoded 85. Now falls through to weightage calculation below.
          */
-        if (dangerCount >= 2) {
-            return 85;
-        }
 
         /*
          RULE 3:
          Lexical Danger + no blacklist hit + no domain flag.
-         Raised from 35 → 65 so novel phishing is Suspicious (not Safe).
-         Only suppress if domain is explicitly Clean AND ssl is also Clean
-         (both corroborating evidence of legitimacy).
+         Capped at 55 (<60) because ML can be inaccurate.
          */
         if (
                 "Danger".equalsIgnoreCase(lexical.getStatus())
@@ -54,28 +50,21 @@ public class RiskScoringEngine {
                         && "Clean".equalsIgnoreCase(domain.getStatus())
                         && "Clean".equalsIgnoreCase(ssl.getStatus())
         ) {
-            return 65;
+            return 55;
         }
 
         /*
          RULE 3b:
-         Lexical Danger + SSL warning/danger + no blacklist = strong corroboration.
-         Novel phishing with bad cert evidence should score High Risk.
+         Lexical Danger + SSL warning/danger.
+         Removed hardcoded 78. Now falls through to weightage calculation below.
          */
-        if (
-                "Danger".equalsIgnoreCase(lexical.getStatus())
-                        && "Clean".equalsIgnoreCase(blacklist.getStatus())
-                        && !"Clean".equalsIgnoreCase(ssl.getStatus())
-        ) {
-            return 78;
-        }
 
         /*
          RULE 4:
-         1 Danger + 1+ Warning from remaining modules = elevated risk
+         1 Danger (not blacklist) + 3 Warnings = score > 70
          */
-        if (dangerCount == 1 && warningCount >= 1) {
-            return 72;
+        if (dangerCount == 1 && warningCount >= 3) {
+            return 75;
         }
 
         /*
