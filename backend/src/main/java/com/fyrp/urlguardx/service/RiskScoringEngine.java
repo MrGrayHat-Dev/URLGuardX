@@ -85,7 +85,7 @@ public class RiskScoringEngine {
          */
         double lexicalScore = lexical.getScore();
 
-        if (lexicalScore > 90
+        if (lexicalScore > 95
                 && "Clean".equalsIgnoreCase(blacklist.getStatus())
                 && "Clean".equalsIgnoreCase(domain.getStatus())
                 && "Clean".equalsIgnoreCase(ssl.getStatus())) {
@@ -96,10 +96,10 @@ public class RiskScoringEngine {
          Final weighted score
          */
         double finalScore =
-                (blacklist.getScore() * 0.40) +
-                        (domain.getScore() * 0.25) +
-                        (ssl.getScore() * 0.20) +
-                        (lexicalScore * 0.15);
+                (lexicalScore          * 0.25) +
+                        (blacklist.getScore() * 0.40) +
+                        (domain.getScore()    * 0.20) +
+                        (ssl.getScore()       * 0.15);
 
         return Math.min(
                 (int) Math.round(finalScore),
