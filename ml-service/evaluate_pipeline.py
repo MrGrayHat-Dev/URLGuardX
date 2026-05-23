@@ -54,6 +54,12 @@ preds     = []
 scores    = []
 latencies = []
 
+# API Request tracking
+whois_requests = 0
+whois_skipped  = 0
+ssl_requests   = 0
+ssl_skipped    = 0
+
 # Ablation columns — one prediction list per stage
 table3 = {
     "lexical"  : [],   # Stage 1 : ML lexical alone
@@ -152,6 +158,16 @@ for idx, (url, label) in enumerate(zip(urls, labels), start=1):
             dom_bin = module_to_binary(domain.get("status",    "Clean"))
             ssl_bin = module_to_binary(ssl.get("status",       "Clean"))
             bl_bin  = module_to_binary(blacklist.get("status", "Clean"))
+            
+            if "skipped" in str(domain.get("status", "")).lower() or "skipped" in str(domain.get("message", "")).lower():
+                whois_skipped += 1
+            else:
+                whois_requests += 1
+                
+            if "skipped" in str(ssl.get("status", "")).lower() or "skipped" in str(ssl.get("message", "")).lower():
+                ssl_skipped += 1
+            else:
+                ssl_requests += 1
 
             # ── Ablation stages ───────────────────────────────────────────
             # Stage 1: Lexical (ML) only
@@ -240,6 +256,14 @@ print(f"\nLatency avg     : {lat_avg:.2f}s")
 print(f"Latency p95     : {lat_p95:.2f}s")
 print(f"Latency min     : {lat_min:.2f}s")
 print(f"Latency max     : {lat_max:.2f}s")
+
+print("\n===================================")
+print("API Efficiency (Fail-Fast / Cache)")
+print("===================================")
+print(f"WHOIS API Executed : {whois_requests}")
+print(f"WHOIS API Skipped  : {whois_skipped} (Saved!)")
+print(f"SSL Checks Executed: {ssl_requests}")
+print(f"SSL Checks Skipped : {ssl_skipped} (Saved!)")
 
 # =========================================================
 # TABLE III — ABLATION
