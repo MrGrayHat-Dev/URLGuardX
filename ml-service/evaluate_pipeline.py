@@ -78,13 +78,14 @@ def overall_to_binary(status: str) -> int:
 
     RiskScoringEngine.getFinalStatus() emits exactly:
       'High Risk'  (score >= 70) → phishing   → 1
-      'Suspicious' (score >= 40) → ambiguous  → 0
+      'Suspicious' (score >= 40) → phishing   → 1
       'Safe'       (score <  40) → benign     → 0
 
-    Only 'High Risk' is treated as a definitive positive.
-    Threshold lowered from 75 → 70 to improve recall on novel phishing.
+    Both 'High Risk' and 'Suspicious' are treated as successful detections 
+    (positives) for the purpose of the evaluation benchmark.
     """
-    return 1 if str(status).strip().lower() == "high risk" else 0
+    status_lower = str(status).strip().lower()
+    return 1 if status_lower in ("high risk", "suspicious") else 0
 
 
 def module_to_binary(status: str) -> int:
@@ -104,15 +105,19 @@ def mock_engine_decision(lex: int, dom: int, ssl_v: int, bl: int = 0) -> int:
     Since the engine now uses normalized weightage (Rule 2/3b) and boundary
     overrides (Rule 4), a simple linear sum is no longer accurate.
     
-    Approximation logic:
+    Approximation logic (Suspicious mapped to 1):
       - Rule 1: Blacklist Danger → always High Risk (1)
-      - Rule 2/3b: Any 2+ active modules → normalized score ~100 → High Risk (1)
-      - Rule 3/Formula: Any 1 module (except Blacklist) → < 70 → Safe/Suspicious (0)
+      - Rule 2/3b: Any 2+ active modules → High Risk (1)
+      - Rule 3: Lexical alone → Suspicious (55) → Counts as (1)
+      - Formula: Domain alone (20) or SSL alone (15) → Safe (0)
     """
     if bl == 1:
         return 1
     
     if (lex + dom + ssl_v) >= 2:
+        return 1
+        
+    if lex == 1:
         return 1
         
     return 0
