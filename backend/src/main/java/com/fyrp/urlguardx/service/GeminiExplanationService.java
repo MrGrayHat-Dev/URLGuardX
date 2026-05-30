@@ -352,8 +352,11 @@ Now write the explanation (2–3 sentences, plain text, no headers):
     private String nullSafe(String s) {
         if (s == null) return "no details available";
         // Strip highly technical TLS jargon for layman explanations
-        return s.replaceAll("\\.?\\s*Issuer:.*?\\.", "")
-                .replaceAll("\\.?\\s*Protocol:.*?\\.", "")
+        return s.replaceAll("(?i)\\.?\\s*Issuer:.*", "")
+                .replaceAll("(?i)\\.?\\s*Protocol:.*", "")
+                .replaceAll("(?i)\\s*Issued by:.*?\\.", "")
+                .replaceAll("(?i)\\s*\\(issued by.*?\\)", "")
+                .replaceAll("(?i)\\s*Cert issued by:.*?\\.", "")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
