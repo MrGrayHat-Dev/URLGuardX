@@ -226,28 +226,26 @@ Now write the explanation (2–3 sentences, plain text, no headers):
         if (dangerCount >= 2) {
             StringBuilder sb = new StringBuilder();
             sb.append("Multiple independent modules flagged this URL as dangerous. ");
-            if (isDanger(domain))   sb.append("Domain analysis: ").append(nullSafe(domain.getDetails())).append(". ");
-            if (isDanger(ssl))      sb.append("SSL/TLS: ").append(nullSafe(ssl.getDetails())).append(". ");
-            if (isDanger(lexical))  sb.append("The machine learning engine also detected strong phishing patterns. ");
+            if (isDanger(domain))   sb.append("Domain registration data is suspicious. ");
+            if (isDanger(ssl))      sb.append("Critical SSL/TLS security failure. ");
+            if (isDanger(lexical))  sb.append("The machine learning engine detected strong phishing patterns. ");
             sb.append("Combined corroboration pushed the overall risk to High Risk.");
             return sb.toString().trim();
         }
 
         // ── RULE 3 — Lexical DANGER isolated ─────────────────────────────
         if (isDanger(lexical) && isClean(blacklist) && isClean(domain) && isClean(ssl)) {
-            return "The machine learning model detected suspicious lexical patterns in the URL ("
-                 + nullSafe(lexical.getDetails()) + "), but no blacklist hits, "
-                 + "domain abuse indicators, or TLS issues were found. "
+            return "The machine learning model detected suspicious lexical patterns in the URL, "
+                 + "but no blacklist hits, domain abuse indicators, or TLS issues were found. "
                  + "This may be a false positive — treat with moderate caution.";
         }
 
         // ── RULE 3b — Lexical DANGER + SSL or Domain flagged ─────────────
         if (isDanger(lexical) && isClean(blacklist) && (!isClean(ssl) || !isClean(domain))) {
             StringBuilder sb = new StringBuilder();
-            sb.append("The machine learning model detected phishing-like URL patterns (")
-              .append(nullSafe(lexical.getDetails())).append("), ");
-            if (!isClean(domain)) sb.append("and domain analysis raised concerns: ").append(nullSafe(domain.getDetails())).append(". ");
-            if (!isClean(ssl))    sb.append("SSL/TLS also flagged an issue: ").append(nullSafe(ssl.getDetails())).append(". ");
+            sb.append("The machine learning model detected phishing-like URL patterns, ");
+            if (!isClean(domain)) sb.append("and domain analysis raised concerns. ");
+            if (!isClean(ssl))    sb.append("SSL/TLS also flagged an issue. ");
             sb.append("Two independent signals corroborate a high-risk verdict.");
             return sb.toString().trim();
         }
@@ -299,24 +297,32 @@ Now write the explanation (2–3 sentences, plain text, no headers):
     //  (excludes blacklist, which is handled at RULE 1)
     // ─────────────────────────────────────────────────────────────────────────
     private String getDangerDetail(ModuleResult lexical, ModuleResult domain, ModuleResult ssl) {
-        if (isDanger(domain))  return "Domain analysis — " + nullSafe(domain.getDetails());
-        if (isDanger(ssl))     return "SSL/TLS — " + nullSafe(ssl.getDetails());
-        if (isDanger(lexical)) return "ML lexical model — " + nullSafe(lexical.getDetails());
-        return "unknown signal";
+        if (isDanger(domain))  return "domain age or registrar data is highly suspicious";
+        if (isDanger(ssl))     return "critical SSL/TLS security failure";
+        if (isDanger(lexical)) return "strong phishing patterns detected in URL structure";
+        return "unknown security threat";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Helper — build a comma-separated summary of all WARNING module details
     // ─────────────────────────────────────────────────────────────────────────
     private String buildWarningSummary(ModuleResult... modules) {
-        StringBuilder sb = new StringBuilder();
+        java.util.List<String> warnings = new java.util.ArrayList<>();
         for (ModuleResult m : modules) {
             if (isWarning(m)) {
-                if (sb.length() > 0) sb.append("; ");
-                sb.append(nullSafe(m.getDetails()));
+                // Map the specific module object to a generic layman description
+                if (m.getDetails() != null) {
+                    String d = m.getDetails().toLowerCase();
+                    if (d.contains("domain") || d.contains("whois") || d.contains("registrar")) warnings.add("suspicious domain registration");
+                    else if (d.contains("ssl") || d.contains("tls") || d.contains("certificate")) warnings.add("problematic TLS connection");
+                    else if (d.contains("lexical") || d.contains("model")) warnings.add("unusual URL structure");
+                    else warnings.add("minor anomalies");
+                } else {
+                    warnings.add("minor anomalies");
+                }
             }
         }
-        return sb.length() > 0 ? sb.toString() : "minor anomalies detected";
+        return warnings.isEmpty() ? "minor anomalies detected" : String.join(", ", warnings);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
