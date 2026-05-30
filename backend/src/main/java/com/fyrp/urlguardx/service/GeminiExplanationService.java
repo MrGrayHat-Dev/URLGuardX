@@ -45,7 +45,7 @@ public class GeminiExplanationService {
     ) {
         // Verdict prefix — always the very first token so the UI / caller
         // can strip or display it trivially.
-        String verdict = buildVerdictPrefix(status, riskScore);
+        String verdict = buildVerdictPrefix(status);
 
         // ── Try Gemini first ──────────────────────────────────────────────
         if (geminiApiKey != null && !geminiApiKey.isBlank() && !geminiApiKey.startsWith("YOUR_")) {
@@ -100,11 +100,11 @@ public class GeminiExplanationService {
     //  Verdict prefix  (mirrors RiskScoringEngine.getFinalStatus thresholds)
     //  Format:  "⚠ SUSPICIOUS (score 52/100):"
     // ─────────────────────────────────────────────────────────────────────────
-    private String buildVerdictPrefix(String status, int riskScore) {
+    private String buildVerdictPrefix(String status) {
         return switch (status) {
-            case "High Risk"   -> "🔴 HIGH RISK (score " + riskScore + "/100):";
-            case "Suspicious"  -> "🟡 SUSPICIOUS (score " + riskScore + "/100):";
-            default            -> "🟢 SAFE (score " + riskScore + "/100):";
+            case "High Risk"   -> "🔴 HIGH RISK:";
+            case "Suspicious"  -> "🟡 SUSPICIOUS:";
+            default            -> "🟢 SAFE:";
         };
     }
 
@@ -229,7 +229,7 @@ Now write the explanation (2–3 sentences, plain text, no headers):
             if (isDanger(domain))   sb.append("Domain analysis: ").append(nullSafe(domain.getDetails())).append(". ");
             if (isDanger(ssl))      sb.append("SSL/TLS: ").append(nullSafe(ssl.getDetails())).append(". ");
             if (isDanger(lexical))  sb.append("The machine learning engine also detected strong phishing patterns. ");
-            sb.append("Combined corroboration pushed the score to ").append(riskScore).append("/100.");
+            sb.append("Combined corroboration pushed the overall risk to High Risk.");
             return sb.toString().trim();
         }
 
@@ -258,8 +258,7 @@ Now write the explanation (2–3 sentences, plain text, no headers):
             String warningSummary = buildWarningSummary(lexical, domain, ssl);
             return "One module raised a critical alert: " + dangerDetail + ". "
                  + "Additional warning signals were detected: " + warningSummary + ". "
-                 + "The combination of a definitive flag and corroborating warnings elevates the risk score to "
-                 + riskScore + "/100.";
+                 + "The combination of a definitive flag and corroborating warnings elevates the overall risk.";
         }
 
         // ── RULE 4b — Three or more WARNINGs, no DANGER ──────────────────
