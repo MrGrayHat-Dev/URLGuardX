@@ -148,7 +148,8 @@ STRICT RULES:
 - If every module is Clean/Skipped, say everything checked out and the URL appears safe.
 - Never say "all checks passed" unless every module is CLEAN or SKIPPED.
 - Prioritise signals in this order: Blacklist > Domain > SSL > Lexical.
-- Be specific (quote details verbatim where useful, e.g. "domain registered 3 days ago").
+- Explain in simple, layman's terms. Do not include highly technical jargon like specific TLS protocol versions (e.g., TLSv1.3) or certificate issuer names.
+- Be specific about the risk (e.g. "domain registered 3 days ago").
 - No markdown, no bullet points, no headers. Plain sentences only.
 
 URL: %s
@@ -279,6 +280,10 @@ Now write the explanation (2–3 sentences, plain text, no headers):
         // ── Golden-domain path (domain.details contains the keyword) ─────
         if (domain.getDetails() != null &&
                 domain.getDetails().toLowerCase().contains("golden domain")) {
+            if (warningCount > 0) {
+                return "This URL belongs to a well-known, trusted domain, so WHOIS analysis was skipped. "
+                     + "However, a minor issue was detected: " + buildWarningSummary(lexical, domain, ssl, blacklist) + ".";
+            }
             return "This URL belongs to a well-known, trusted domain. "
                  + "WHOIS analysis was skipped given the domain's established reputation, "
                  + "and all other checks (TLS, blacklist, and ML) returned clean results.";
@@ -345,6 +350,11 @@ Now write the explanation (2–3 sentences, plain text, no headers):
     }
 
     private String nullSafe(String s) {
-        return s != null ? s : "no details available";
+        if (s == null) return "no details available";
+        // Strip highly technical TLS jargon for layman explanations
+        return s.replaceAll("\\.?\\s*Issuer:.*?\\.", "")
+                .replaceAll("\\.?\\s*Protocol:.*?\\.", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 }
